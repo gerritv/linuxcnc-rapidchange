@@ -50,7 +50,10 @@ T0 M6 ; Drop T2
 M64 P[#<_ini[RAPIDCHANGEATC]COVER_DO>]
 
 ; Close dust cover
-M64 P[#<_ini[RAPIDCHANGEATC]COVER_DO>]
+M65 P[#<_ini[RAPIDCHANGEATC]COVER_DO>]
+
+; Toolset current tool
+O<toolset> CALL
 ```
 
 ## Installation
@@ -63,11 +66,17 @@ Add `RAPIDCHANGEATC` section and set values for your machine.
 
 ```ini
 [RAPIDCHANGEATC]
+# Set to 1 to force all chnages to be handled manually.
+# Set IR_DI to -1 to disable probing after tool change
+FORCE_ALL_MANUAL_CHANGES = 0
+# Probe tool length after manual tool changes. 1 to enable, 0 to disable
+PROBE_AFTER_MANUAL_LOAD = 0
+
 NUM_POCKETS = 8
 
 # Position of pocket #1
-POCKET_BASE_X = 583
-POCKET_BASE_Y = 99.5
+POCKET_BASE_X = 580
+POCKET_BASE_Y = 100
 
 # Distance between pockets (can be negative values)
 POCKET_OFFSET_X = 0
@@ -76,23 +85,23 @@ POCKET_OFFSET_Y = 45
 # Save Z height
 #  Before any XY moves, will G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>] to avoid collisions
 #  Usually upper Z limit
-SAFE_Z = 195
+SAFE_Z = 194
 
 # RPM when loading
-ENGAGE_LOAD_RPM = 1500
+ENGAGE_LOAD_RPM = 1700
 # Number of strikes during loading, usually 2, but 3 ok.
 ENGAGE_LOAD_STRIKES = 1
 # RPM when unloading, usually 300RPM higher than load
-ENGAGE_UNLOAD_RPM = 1800
+ENGAGE_UNLOAD_RPM = 1900
 # Number of strikes during unloading, usually 1
 ENGAGE_UNLOAD_STRIKES = 2
 
 # Machine Z where nut breaks IR, or nut flush with top of changer
-ENGAGE_Z_START = 85
+ENGAGE_Z_START = 80
 # Machine Z at bottom of engage cycle
 #  30mm from top of changer
 #  ~34mm from IR break
-ENGAGE_Z_END = 55
+ENGAGE_Z_END = 50
 # Feed rate when engaging changer
 ENGAGE_FEED = 2000
 
@@ -104,13 +113,14 @@ IR_DI = 0
 COVER_DO = 0
 
 # Toolsetter position
-TOOLSET_X = 582.5
-TOOLSET_Y = 55
+TOOLSET_X = 580
+TOOLSET_Y = 45
 
 # Feed rate when searching for end of tool
-TOOLSET_SEARCH_FEED = 200
-# Max distance to search (negative value on most machines)
-TOOLSET_SEARCH_DISTANCE = -100
+TOOLSET_SEARCH_FEED = 500
+# Max distance to search (negative value on most machines).
+# Ensure spindle with empty collet nut won't crash into toolsetter before exceeding this travel.
+TOOLSET_SEARCH_DISTANCE = -110
 # Backoff distance from search contact to begin latch probe (positive value on most machines)
 TOOLSET_LATCH_BACKOFF = 1
 # Feed rate when doing more precise latch probe
@@ -118,10 +128,10 @@ TOOLSET_LATCH_FEED = 10
 # Max distance to do latch probe, should be a little more than (negative value on most machines)
 TOOLSET_LATCH_DISTANCE = -1.5
 # Machine Z when nut would contact tool setter, used to calculate tool offset
-TOOLSET_HEIGHT = 83
+TOOLSET_HEIGHT = 80
 
 # Position to rapid to for manual tool changes
-MANUAL_CHANGE_X = 582.5
+MANUAL_CHANGE_X = 580
 MANUAL_CHANGE_Y = 0
 
 # motion.digital-out-xx to trigger manual tool change UI
@@ -184,16 +194,19 @@ Update `rapidchange/atc.hal` to:
 1.  Connect IO nets
     - IR (`rapidchange-dust-cover`)
     - Dust cover(`rapidchange-dust-cover`)
-    - Tool setter to correct IO pins (`rapidchange-toolsetter`)
+    - Tool setter to unused motion IO pins (`rapidchange-toolsetter`)
+      - Set `[RAPIDCHANGEATC]TOOL_CHANGE_DO` and `[RAPIDCHANGEATC]TOOL_CHANGED_DI` to match
 2.  If using tool setter, connect `rapidchange-toolsetter` to `motion.probe-input`
 
+    If no other probes
+
     ```
-    # If no other probes
-
     net rapidchange-toolsetter motion.probe-input
+    ```
 
-    # If other probes
+    If using other probes or toolsetters
 
+    ```
     loadrt or2 names=probes
     addf probes servo-thread
     net rapidchange-toolsetter  probes.in0
@@ -201,4 +214,4 @@ Update `rapidchange/atc.hal` to:
     net any-probe               probes.out => motion.probe-input
     ```
 
-3.  Replace `hal_manualtoolchange` configuration if using another manual tool change UI
+3.  If using another manual tool change UI, replace `hal_manualtoolchange` configuration
