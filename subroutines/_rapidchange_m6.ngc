@@ -1,0 +1,206 @@
+; Remapped M6 behavior for RapidChange ATC
+; Must use rapidchange_change_prolog which calculates pocket positions and determines which steps to execute.
+o<_rapidchange_m6> sub
+    ; Don't execute in UI preview
+    O100 if [#<_task> EQ 0]
+        (print, Skipping in preview)
+    O100     return [999]
+    O100 endif
+
+    o101 if [#<_spindle_on> eq 1]
+        (abort, Spindle must be stopped before M6)
+    o101 return [-100]
+    o101 endif
+
+    m73 ; Save and autorestore modal states
+
+    G21 ; Set millimeters
+
+    (print, rc_current_pocket= #<rc_current_pocket>, rc_selected_pocket = #<rc_selected_pocket>)
+    (print, tool_in_spindle = #<tool_in_spindle>, selected_tool = #<selected_tool>)
+
+    G90 ; Ensure everything that we do is done in absolute coordinates
+    G61 ; Exact Stop Mode, disables path blending
+
+    ; Store original position to return to (These are in the current WCS)
+    #<original_abs_x> = #<_abs_x>
+    #<original_abs_y> = #<_abs_y>
+    #<original_z> = #<_z>
+
+    ; Move to safe Z
+    o115 if [#<rc_do_any_action> eq 1]
+        o116 if [#<_ini[RAPIDCHANGEATC]COVER_DO> ge 0]
+            ; Open dust cover
+            M64 P[#<_ini[RAPIDCHANGEATC]COVER_DO>]
+        o116 endif
+
+        (print, Moving to safe Z)
+        ; move to safe Z
+        G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
+    o115 endif
+
+    ; Do manual tool drop
+    o120 if [#<rc_do_manual_drop> eq 1]
+        (print, Moving for manual tool drop)
+        ; move
+        G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
+        G53 G0 X[#<_ini[RAPIDCHANGEATC]MANUAL_CHANGE_X>] Y[#<_ini[RAPIDCHANGEATC]MANUAL_CHANGE_Y>]
+
+        ; Ensure tool changed is currently low
+        M66 L0 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGED_DI>]
+        o121 if [#5399 ne 0]
+            (msg, Failed! Tool changed DI hung high.)
+        o121 return [-1]
+        o121 endif
+
+        ; set DO to trigger hal_manualtoolchange
+        M64 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGE_DO>]
+        ; Wait for DI from hal_manualtoolchange to continue
+        M65 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGED_DI>]
+        ; Clear DO to trigger hal_manualtoolchange
+        M65 L3 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGE_DO>]
+
+        G49 ; clear current tool offset
+    o120 endif
+
+    ; Do RC tool drop
+    o130 if [#<rc_do_rc_drop> EQ 1]
+        (print, Dropping tool #<tool_in_spindle> at #<rc_drop_x>,#<rc_drop_y>)
+        ; move to rc_drop_x, rc_drop_y
+        G53 G0 X[#<rc_drop_x>] Y[#<rc_drop_y>]
+
+        ; Move close to pocket
+        G53 G0 Z[#<_ini[RAPIDCHANGEATC]ENGAGE_Z_START>]
+
+        ; Spindle on
+        M4 S[#<_ini[RAPIDCHANGEATC]ENGAGE_UNLOAD_RPM>]
+
+        #<strikes_remaining> = #<_ini[RAPIDCHANGEATC]ENGAGE_UNLOAD_STRIKES>
+        o131 while [#<strikes_remaining> gt 0]
+            #<strikes_remaining> = [#<strikes_remaining> - 1]
+
+            ; Lower into pocket
+            G53 G1 Z[#<_ini[RAPIDCHANGEATC]ENGAGE_Z_END>] F[#<_ini[RAPIDCHANGEATC]ENGAGE_FEED>] 
+
+            ; Move to IR checking position
+            G53 G1 Z[#<_ini[RAPIDCHANGEATC]ENGAGE_Z_START>] F[#<_ini[RAPIDCHANGEATC]ENGAGE_FEED>]
+        o131 endwhile
+        
+        M5 ; Stop spindle
+        G04 P1  ; Dwell to allow spindle to stop
+
+        o132 if [#<_ini[RAPIDCHANGEATC]IR_DI> lt 0]
+            (print, Unload Success. No IR DI configured, assuming success.)
+        o132 else
+            M66 P[#<_ini[RAPIDCHANGEATC]IR_DI>] L0  ; Read IR sensor status
+
+            o133 if [#5399 ne 0]
+                (msg, Unload FAILED! Tool still present)
+                G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
+            o133 return [-2] ; Fail M6
+            o133 endif
+        o132 endif
+
+        G49 ; clear current tool offset
+    o130 endif
+
+    ; Do manual tool pickup
+    o140 if [#<rc_do_manual_pickup> EQ 1]
+        (print, Moving for manual tool pickup)
+        ; move
+        G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
+        G53 G0 X[#<_ini[RAPIDCHANGEATC]MANUAL_CHANGE_X>] Y[#<_ini[RAPIDCHANGEATC]MANUAL_CHANGE_Y>]
+        
+        ; Ensure tool changed is currently low
+        M66 L0 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGED_DI>]
+        o141 if [#5399 ne 0]
+            (msg, Failed! Tool changed DI hung high.)
+        o141 return [-3]
+        o141 endif
+
+        ; set DO to trigger hal_manualtoolchange
+        M64 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGE_DO>]
+        ; Wait for DI from hal_manualtoolchange to continue
+        M65 L3 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGED_DI>]
+        ; Clear DO to trigger hal_manualtoolchange
+        M65 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGE_DO>]
+        
+        ; Run builtin M6 to update tool data
+        M6
+    o140 endif
+
+    ; Do RC tool pickup
+    o150 if [#<rc_do_rc_pickup> EQ 1]
+        (print, Pickup tool #<selected_tool> at #<rc_pickup_x>,#<rc_pickup_y>)
+        ; move to rc_pickup_x, rc_pickup_y
+        G53 G0 X[#<rc_pickup_x>] Y[#<rc_pickup_y>]
+
+        ; Move close to pocket
+        G53 G0 Z[#<_ini[RAPIDCHANGEATC]ENGAGE_Z_START>]
+
+        ; Spindle on
+        M3 S[#<_ini[RAPIDCHANGEATC]ENGAGE_LOAD_RPM>]
+
+        #<strikes_remaining> = #<_ini[RAPIDCHANGEATC]ENGAGE_LOAD_STRIKES>
+        o151 while [#<strikes_remaining> gt 0]
+            #<strikes_remaining> = [#<strikes_remaining> - 1]
+
+            ; Lower into pocket
+            G53 G1 Z[#<_ini[RAPIDCHANGEATC]ENGAGE_Z_END>] F[#<_ini[RAPIDCHANGEATC]ENGAGE_FEED>] 
+
+            ; Move to IR checking position
+            G53 G1 Z[#<_ini[RAPIDCHANGEATC]ENGAGE_Z_START>] F[#<_ini[RAPIDCHANGEATC]ENGAGE_FEED>]
+        o151 endwhile
+        
+        M5 ; Stop spindle
+        G04 P1  ; Dwell to allow spindle to stop
+
+        o152 if [#<_ini[RAPIDCHANGEATC]IR_DI> lt 0]
+            (print, Load Success. No IR DI configured, assuming success.)
+        o152 else
+            M66 P[#<_ini[RAPIDCHANGEATC]IR_DI>] L0  ; Read IR sensor status
+
+            o153 if [#5399 ne 1]
+                (msg, Load FAILED! Tool not present)
+                G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
+            o153 return [-4] ; Fail M6
+            o153 endif
+        o152 endif
+
+        ; Run builtin M6 to update tool data
+        M6 
+    o150 endif
+
+    ; Probe new tool
+    o160 if [#<rc_do_probe> EQ 1]
+        (print, Probing)
+        
+        m72 ; restore modal states. We want g43 to remain applied
+
+        ; G49 ; clear current tool offset
+        o<_rapidchange_probe> call
+
+        m73 ; save modal states
+    o160 endif
+
+    ; Return to original position
+    o170 if [#<rc_do_any_action> EQ 1]
+        (print, Restoring original position)
+        ; Move to safe Z
+        G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
+        ; Restore XY
+        G53 G0 X[#<original_abs_x>] Y[#<original_abs_y>]
+
+        o171 if [#<_ini[RAPIDCHANGEATC]COVER_DO> ge 0]
+            ; Close dust cover
+            M65 P[#<_ini[RAPIDCHANGEATC]COVER_DO>]
+        o171 endif
+
+        ; Restore Z, WITHOUT G53 so it includes tool length
+        G0 Z[#<original_z>]
+    o170 endif
+
+    (print, End of Tool Change Program)
+o<_rapidchange_m6> endsub [1]
+
+M2
