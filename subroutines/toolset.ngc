@@ -8,8 +8,13 @@ o<toolset> sub
 
     o101 if [#<_spindle_on> eq 1]
         (abort, Spindle must be stopped before o<toolset> call)
-    o101 return [-100]
+    o101 return [-101]
     o101 endif
+
+    o102 if [#<_current_tool> eq 0]
+        (abort, Load tool before tool setting. _current_tool = 0)
+    o102 return [-102]
+    0102 endif
     
     o116 if [#<_ini[RAPIDCHANGEATC]COVER_DO> ge 0]
         ; Open dust cover
