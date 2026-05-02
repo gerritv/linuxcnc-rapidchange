@@ -1,10 +1,10 @@
 ; Measure tool length using RapidChange toolsetter
 o<toolset> sub
     ; Don't execute in UI preview
-    O100 if [#<_task> EQ 0]
+    o100 if [#<_task> EQ 0]
         (print, Skipping in preview)
-    O100     return [999]
-    O100 endif
+    o100     return [999]
+    o100 endif
 
     o101 if [#<_spindle_on> eq 1]
         (abort, Spindle must be stopped before o<toolset> call)
@@ -14,7 +14,7 @@ o<toolset> sub
     o102 if [#<_current_tool> eq 0]
         (abort, Load tool before tool setting. _current_tool = 0)
     o102 return [-102]
-    0102 endif
+    o102 endif
     
     o116 if [#<_ini[RAPIDCHANGEATC]COVER_DO> ge 0]
         ; Open dust cover
@@ -30,3 +30,4 @@ o<toolset> sub
 o<toolset> endsub [1]
 
 M2
+
