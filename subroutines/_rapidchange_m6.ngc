@@ -87,7 +87,7 @@ o<_rapidchange_m6> sub
         o131 endwhile
         
         M5 ; Stop spindle
-        G04 P1  ; Dwell to allow spindle to stop
+        G4 P1  ; Dwell to allow spindle to stop
 
         o132 if [#<_ini[RAPIDCHANGEATC]IR_DI> lt 0]
             (print, Unload Success. No IR DI configured, assuming success.)
@@ -102,6 +102,8 @@ o<_rapidchange_m6> sub
         o132 endif
 
         G49 ; clear current tool offset
+
+        G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
     o130 endif
 
     ; Do manual tool pickup
@@ -127,6 +129,8 @@ o<_rapidchange_m6> sub
         
         ; Run builtin M6 to update tool data
         M6
+
+        G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
     o140 endif
 
     ; Do RC tool pickup
@@ -153,7 +157,7 @@ o<_rapidchange_m6> sub
         o151 endwhile
         
         M5 ; Stop spindle
-        G04 P1  ; Dwell to allow spindle to stop
+        G4 P1  ; Dwell to allow spindle to stop
 
         o152 if [#<_ini[RAPIDCHANGEATC]IR_DI> lt 0]
             (print, Load Success. No IR DI configured, assuming success.)
@@ -165,10 +169,25 @@ o<_rapidchange_m6> sub
                 G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
             o153 return [-4] ; Fail M6
             o153 endif
+
+            ; Move to height IR should break with fully threaded on nut
+            G53 G0 Z[#<_ini[RAPIDCHANGEATC]ENGAGE_Z_IR_NUT_BREAK>]
+
+            G4 P0.5 ; Pause to ensure motion is complete
+
+            M66 P[#<_ini[RAPIDCHANGEATC]IR_DI>] L0  ; Read IR sensor status
+
+            o154 if [#5399 ne 0]
+                (msg, Load FAILED! Nut not fully threaded on)
+                G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
+            o154 return [-4] ; Fail M6
+            o154 endif
         o152 endif
 
         ; Run builtin M6 to update tool data
         M6 
+
+        G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
     o150 endif
 
     ; Probe new tool
@@ -181,6 +200,8 @@ o<_rapidchange_m6> sub
         o<_rapidchange_probe> call
 
         m73 ; save modal states
+
+        G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
     o160 endif
 
     ; Return to original position
@@ -204,3 +225,4 @@ o<_rapidchange_m6> sub
 o<_rapidchange_m6> endsub [1]
 
 M2
+
