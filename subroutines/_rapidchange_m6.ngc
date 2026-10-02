@@ -3,7 +3,9 @@
 o<_rapidchange_m6> sub
     ; Don't execute in UI preview
     O100 if [#<_task> EQ 0]
-        (print, Skipping in preview)
+        M6 T#<selected_tool>
+        o<tormach_tool_change> return [1] (gremlin is loading this code)
+        (ABORT,tool change remap execution went past remap)
     O100     return [999]
     O100 endif
 
@@ -23,10 +25,11 @@ o<_rapidchange_m6> sub
     G61 ; Exact Stop Mode, disables path blending
 
     ; Store original position to return to (These are in the current WCS)
-    #<original_abs_x> = #<_abs_x>
-    #<original_abs_y> = #<_abs_y>
-    #<original_z> = #<_z>
+    #<original_abs_x> = #5021 ;#<_abs_x>
+    #<original_abs_y> = #5022 ;#<_abs_y>
+    #<original_z> = #5023 ;#<_z>
 
+    (print, Original position: #<original_abs_x>,#<original_abs_y>,#<original_z>)
     ; Move to safe Z
     o115 if [#<rc_do_any_action> eq 1]
         o116 if [#<_ini[RAPIDCHANGEATC]COVER_DO> ge 0]
@@ -36,6 +39,7 @@ o<_rapidchange_m6> sub
 
         (print, Moving to safe Z)
         ; move to safe Z
+        (print, Safe Z: [#<_ini[RAPIDCHANGEATC]SAFE_Z>])
         G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
     o115 endif
 
@@ -70,6 +74,7 @@ o<_rapidchange_m6> sub
         G53 G0 X[#<rc_drop_x>] Y[#<rc_drop_y>]
 
         ; Move close to pocket
+        (PRINT, Moving to engage Z start: [#<_ini[RAPIDCHANGEATC]ENGAGE_Z_START>])
         G53 G0 Z[#<_ini[RAPIDCHANGEATC]ENGAGE_Z_START>]
 
         ; Spindle on

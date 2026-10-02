@@ -1,3 +1,6 @@
+from posixpath import devnull
+import subprocess
+from json import tool
 import os
 import linuxcnc
 from interpreter import *
@@ -11,6 +14,7 @@ class RapidChangeConfig:
         # Read RapidChange values from ini file once at startup
         self.inifile = linuxcnc.ini(os.environ['INI_FILE_NAME'])
 
+
         self.FORCE_ALL_MANUAL_CHANGES = self.read_ini_value_bool("FORCE_ALL_MANUAL_CHANGES")
         self.PROBE_AFTER_MANUAL_LOAD = self.read_ini_value_bool("PROBE_AFTER_MANUAL_LOAD")
 
@@ -19,6 +23,10 @@ class RapidChangeConfig:
         self.POCKET_OFFSET_X = self.read_ini_value("POCKET_OFFSET_X")
         self.POCKET_OFFSET_Y = self.read_ini_value("POCKET_OFFSET_Y")
         self.NUM_POCKETS = self.read_ini_value("NUM_POCKETS")
+
+        #Load the rack mapping
+        self.RACK_TABLE = self.read_ini_string("RACK_TABLE")
+        self.rack_map = self.load_rack_map()
 
     def read_ini_value(self, key):
         val = self.inifile.find("RAPIDCHANGEATC", key)
@@ -35,6 +43,54 @@ class RapidChangeConfig:
             return True
         else:
             raise ValueError("Value for key %s must be 0 or 1.", key)
+    
+
+    def read_ini_string(self, key):
+        val = self.inifile.find("RAPIDCHANGEATC", key)
+        if val is None:
+            raise ValueError("Couldn't find RAPIDCHANGEATC.%s" % key)
+        return val.strip()
+
+
+    def load_rack_map(self):
+        """Load rackchange.tbl; returns dict tool->pocket."""
+        rack_map = {}
+
+        if not os.path.exists(self.RACK_TABLE):
+            raise ValueError(
+                "RapidChange rack table not found: %s" % self.RACK_TABLE
+            )
+
+        with open(self.RACK_TABLE) as f:
+            for line in f:
+                line = line.strip()
+
+                if not line or line.startswith(";") or line.startswith("#"):
+                    continue
+
+                parts = line.split(",")
+                if len(parts) != 2:
+                    continue
+
+                try:
+                    pocket = int(parts[0])
+                    tool = int(parts[1])
+                except ValueError:
+                    continue
+
+                if pocket < 1 or pocket > self.NUM_POCKETS:
+                    continue
+
+                if tool > 0:
+                    rack_map[tool] = pocket
+
+        return rack_map
+
+def find_rack_pocket(self, tool):
+    """Return RapidChange pocket for tool, or 0 if not in rack."""
+    if tool <= 0:
+        return 0
+    return self.rapidchange.rack_map.get(tool, 0)
 
 # Calculate X/Y position of given pocket
 def get_pocket_xy(self, pocket):
@@ -71,6 +127,11 @@ def get_pocket_xy(self, pocket):
 
 def rapidchange_change_prolog(self, **words):
     try:
+        if not hasattr(self, "rapidchange"):
+            init_rapidchange(self)
+        # reload the mapping file everytime, jsut in case it has changed since the last time we used it
+        self.rapidchange.rack_map = self.rapidchange.load_rack_map()
+
         if self.selected_pocket < 0:
             self.set_errormsg("M6: No tool prepared")
             return INTERP_ERROR
@@ -92,14 +153,21 @@ def rapidchange_change_prolog(self, **words):
         self.params["selected_pocket"] = self.selected_pocket
 
         # Get Px values from tool table for current and selected tools
-        current_ret, rc_current_pocket = self.find_tool_pocket(self.current_tool)
-        if (current_ret != 0 and self.current_tool > 0):
+        # Get RapidChange pockets from rack map
+        rc_current_pocket = find_rack_pocket(self, self.current_tool)
+        rc_selected_pocket = find_rack_pocket(self, self.selected_tool)
+
+        self.params["rc_current_pocket"] = rc_current_pocket
+        self.params["rc_selected_pocket"] = rc_selected_pocket
+        if (rc_current_pocket == 0 and self.current_tool > 0):
             self.set_errormsg("Current tool, %i, not found in table" % self.current_tool)
+            # TODO Change to try to drop current_tool into an empty pocket, if one exists. If not, then ask for manual remove
             return INTERP_ERROR
         
-        selected_ret, rc_selected_pocket = self.find_tool_pocket(self.selected_tool)
-        if (selected_ret != 0 and self.selected_tool > 0):
+       
+        if (rc_selected_pocket == 0 and self.selected_tool > 0):
             self.set_errormsg("Selected tool, %i, not found in table" % self.selected_tool)
+            # TODO Allow user to add to table, then continue if added, else error out
             return INTERP_ERROR
         
         self.params["rc_current_pocket"] = rc_current_pocket
@@ -152,11 +220,11 @@ def rapidchange_change_prolog(self, **words):
             self.params["rc_pickup_x"] = pickup_x
             self.params["rc_pickup_y"] = pickup_y
 
-        suppress_probe = do_manual_pickup and self.rapidchange.PROBE_AFTER_MANUAL_LOAD
-        do_pickup = do_rc_pickup or do_manual_pickup
+   #     suppress_probe = do_manual_pickup and self.rapidchange.PROBE_AFTER_MANUAL_LOAD
+   #     do_pickup = do_rc_pickup or do_manual_pickup
 
-        do_probe = do_pickup and not suppress_probe
-
+   #     do_probe = do_pickup and not suppress_probe
+        do_probe = False
         self.params["rc_do_probe"] = 1 if do_probe else 0
 
         do_any_action = \
@@ -168,6 +236,51 @@ def rapidchange_change_prolog(self, **words):
 
         return INTERP_OK
     except Exception as e:
-        self.set_errormsg("M6/raidchange_change_prolog: %s" % (e))
+        self.set_errormsg("M6/rapidchange_change_prolog: %s" % (e))
         return INTERP_ERROR
-    
+
+# Prolog for the M290 command, which launches the RapidChange GUI. This is a separate command so that the GUI can be launched from a G-code file without having to do a tool change.
+def launch_rack_gui_prolog(self, **words):
+    os.environ.setdefault("DISPLAY", ":0")
+
+    try:
+        check = subprocess.Popen(
+            ["pgrep", "-f", "rack_gui.py"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+
+        if check.wait() == 0:
+            # GUI already exists: activate its GTK window.
+            try:
+                subprocess.call(
+                    ["wmctrl", "-a", "RapidChange ATC Pocket Map"]
+                )
+            except OSError as error:
+                self.set_errormsg(
+                    "Could not bring Rack GUI forward: %s" % error
+                )
+                return INTERP_ERROR
+
+            return INTERP_OK
+
+    except Exception as error:
+        self.set_errormsg(
+            "M290/launch_rack_gui_prolog: %s" % error
+        )
+        return INTERP_ERROR
+
+    try:
+        subprocess.Popen(
+            ["python3", "/home/operator/rack_gui.py"],
+            close_fds=True
+        )
+    except Exception as error:
+        self.set_errormsg("Could not launch rack GUI: %s" % error)
+        return INTERP_ERROR
+
+    return INTERP_OK
+
+# dummy sub to launch the GUI from a G-code file. The actual work is done in the prolog above.
+def rack_gui_launch_py(self, **words):
+ return INTERP_OK

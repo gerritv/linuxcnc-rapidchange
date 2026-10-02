@@ -1,16 +1,20 @@
-# LinuxCNC RapidChange Configuration
+# Tormach PathPilot RapidChange Configuration
 
-Unofficial LinuxCNC configuration for RapidChangeATC tool changer.
+Unofficial Tormach PathPilot configuration for RapidChangeATC tool changer.
 
 Includes an M6 remap, so normal `Tx M6` commands will use RapidChange ATC.
+
+This is a (very) modified version of https://github.com/haskins-guitars/linuxcnc-rapidchange to work with Tormach's PathPilot. It expects an ETS, if any, to be configured and set at the beginning of each run. Even if you use a RapidChange pocket for an ETS, it will be used by the standard PathPilot M37 code.
+
+There is a companion GUI to manage the rack_map, use M290 to load that from the MDI. Because the typical SOP with PathPilot using an ETS requires starting with an empty spindle, manual tool changes can be avoided by loading your RapidChange magazine and then editing the rack_map. See TODO at end of this README for the case where you need more tools than pockets, currently you will get an error if the required tool is not in the map.
 
 ## Usage
 
 ### Tool Table
 
-The Px value from the tooltable is used to determine which RapidChange pocket to load/unload a tool from. Other tooltable values are loaded normally.
+The Px value from the rack_map.txt file is used to determine which RapidChange pocket to load/unload a tool from. 
 
-Tools with Px values less than 1 or greater than `[RAPIDCHANGEATC].NUM_POCKETS` will trigger a manual tool change request.
+(FIX This so that it is based on tool-present-in-table) Tools with Px values less than 1 or greater than `[RAPIDCHANGEATC].NUM_POCKETS` will trigger a manual tool change request.
 
 Example minimal tool table for an 8 pocket changer.
 
@@ -62,7 +66,11 @@ Copy all files to `rapidchange` directory in your configuration.
 
 ### Add `.ini` file `[RAPIDCHANGEATC]` section
 
-Add `RAPIDCHANGEATC` section and set values for your machine.
+Add 
+
+```
+#pp_includes ../../../rapidchange/rapidchange.ini
+```
 
 ```ini
 [RAPIDCHANGEATC]
@@ -142,7 +150,7 @@ TOOL_CHANGE_DO = 1
 TOOL_CHANGED_DI = 1
 ```
 
-### Update `.ini` file `[RS274NGC]` section
+### Update `remap_common.inc` file in ~/tmc/configs/tormach_mill/common
 
 Add remap and subroutines to your existing `[RS274NGC]` section.
 
@@ -194,24 +202,5 @@ Update `rapidchange/atc.hal` to:
 1.  Connect IO nets
     - IR (`rapidchange-dust-cover`)
     - Dust cover(`rapidchange-dust-cover`)
-    - Tool setter to unused motion IO pins (`rapidchange-toolsetter`)
-      - Set `[RAPIDCHANGEATC]TOOL_CHANGE_DO` and `[RAPIDCHANGEATC]TOOL_CHANGED_DI` to match
-2.  If using tool setter, connect `rapidchange-toolsetter` to `motion.probe-input`
-
-    If no other probes
-
-    ```
-    net rapidchange-toolsetter motion.probe-input
-    ```
-
-    If using other probes or toolsetters
-
-    ```
-    loadrt or2 names=probes
-    addf probes servo-thread
-    net rapidchange-toolsetter  probes.in0
-    net other-probe             probes.in1
-    net any-probe               probes.out => motion.probe-input
-    ```
 
 3.  If using another manual tool change UI, replace `hal_manualtoolchange` configuration
