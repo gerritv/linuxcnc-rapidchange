@@ -9,7 +9,7 @@ Usage:
     python3 rack_gui.py [mapping-file] [number-of-pockets]
 
 For example:
-    python3 rack_gui.py /home/operator/rack_map.txt 10
+    python3 rack_gui.py /home/operator/rapidchange/rack_map.txt 10
 """
 
 from __future__ import print_function
@@ -24,7 +24,7 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk
 
 
-DEFAULT_MAP_FILE = "/home/operator/rack_map.txt"
+DEFAULT_MAP_FILE = "/home/operator/rapidchange/rack_map.txt"
 DEFAULT_POCKETS = 10
 
 

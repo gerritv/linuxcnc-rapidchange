@@ -1,7 +1,23 @@
+[RS274NGC]
+[REMAP_M6]
+modalgroup=6 
+argspec=q 
+prolog=rapidchange_change_prolog 
+ngc=_rapidchange_m6 
+epilog=change_epilog
+
+[REMAP_M290]
+modalgroup=10 
+prolog=launch_rack_gui_prolog
+python=rack_gui_launch_py
+
+
+[PYTHON]
+PATH_PREPEND = ~/rapidchange
 [RAPIDCHANGEATC]
 
 # The map of tool <> pocket
-RACK_TABLE=/home/operator/rack_map.txt
+RACK_TABLE=/home/operator/rapidchange/rack_map.txt
 
 # Set to 1 to force all chnages to be handled manually.
 # Set IR_DI to -1 to disable probing after tool change
@@ -39,6 +55,10 @@ ENGAGE_Z_START = -80
 #  30mm from top of changer
 #  ~34mm from IR break
 ENGAGE_Z_END = -50
+# After loading tool, check IR is broken at this Z to ensure nut is fully threaded on
+# Not used if IR_DI is < 0.
+#  Few mm above ENGAGE_Z_START
+ENGAGE_Z_IR_NUT_BREAK=87
 # Feed rate when engaging changer
 ENGAGE_FEED = 2000
 
