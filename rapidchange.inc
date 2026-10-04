@@ -22,8 +22,6 @@ RACK_TABLE=/home/operator/rapidchange/rack_map.txt
 # Set to 1 to force all chnages to be handled manually.
 # Set IR_DI to -1 to disable probing after tool change
 FORCE_ALL_MANUAL_CHANGES = 0
-# Probe tool length after manual tool changes. 1 to enable, 0 to disable
-PROBE_AFTER_MANUAL_LOAD = 0
 
 NUM_POCKETS = 8
 
@@ -69,23 +67,6 @@ IR_DI = -1
 #   -1 disables cover
 COVER_DO = -1
 
-# Toolsetter position
-TOOLSET_X = 500
-TOOLSET_Y = -45
-
-# Feed rate when searching for end of tool
-TOOLSET_SEARCH_FEED = 500
-# Max distance to search (negative value on most machines).
-# Ensure spindle with empty collet nut won't crash into toolsetter before exceeding this travel.
-TOOLSET_SEARCH_DISTANCE = -110
-# Backoff distance from search contact to begin latch probe (positive value on most machines)
-TOOLSET_LATCH_BACKOFF = 1
-# Feed rate when doing more precise latch probe
-TOOLSET_LATCH_FEED = 10
-# Max distance to do latch probe, should be a little more than (negative value on most machines)
-TOOLSET_LATCH_DISTANCE = -1.5
-# Machine Z when nut would contact tool setter, used to calculate tool offset
-TOOLSET_HEIGHT = 80
 
 # Position to rapid to for manual tool changes
 MANUAL_CHANGE_X = 580

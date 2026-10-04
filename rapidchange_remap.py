@@ -16,7 +16,7 @@ class RapidChangeConfig:
 
 
         self.FORCE_ALL_MANUAL_CHANGES = self.read_ini_value_bool("FORCE_ALL_MANUAL_CHANGES")
-        self.PROBE_AFTER_MANUAL_LOAD = self.read_ini_value_bool("PROBE_AFTER_MANUAL_LOAD")
+        # TODO Remove self.PROBE_AFTER_MANUAL_LOAD = self.read_ini_value_bool("PROBE_AFTER_MANUAL_LOAD")
 
         self.POCKET_BASE_X = self.read_ini_value("POCKET_BASE_X")
         self.POCKET_BASE_Y = self.read_ini_value("POCKET_BASE_Y")
@@ -117,19 +117,20 @@ def get_pocket_xy(self, pocket):
 #   #<rc_drop_x>            X location of RapidChange pocket to drop at
 #   #<rc_drop_y>            Y location of RapidChange pocket to drop at
 #
-#   #<rc_do_rc_pickup>      1 if current tool should be dropped in RapidChange pocket
-#   #<rc_do_manual_pickup>  1 if current tool should be dropped manually
+#   #<rc_do_rc_pickup>      1 if current tool should be picked up from RapidChange pocket
+#   #<rc_do_manual_pickup>  1 if current tool should be picked up manually
 #   #<rc_pickup_x>          X location of RapidChange pocket to drop at
 #   #<rc_pickup_y>          Y location of RapidChange pocket to drop at
 # 
-#   #<rc_do_probe>          1 if selected tool should be probed
 #   #<rc_do_any_action>     1 if doing any drop or probe. Used to supress move to safe Z when there's nothing to do.
 
 def rapidchange_change_prolog(self, **words):
     try:
+        # trick to get RapidChange init'd without modifying PP's toplevel and remap.py modules. This is a bit of a hack, but it works.
         if not hasattr(self, "rapidchange"):
             init_rapidchange(self)
-        # reload the mapping file everytime, jsut in case it has changed since the last time we used it
+
+        # reload the mapping file everytime, just in case it has changed since the last time we used it
         self.rapidchange.rack_map = self.rapidchange.load_rack_map()
 
         if self.selected_pocket < 0:
@@ -137,6 +138,7 @@ def rapidchange_change_prolog(self, **words):
             return INTERP_ERROR
         
         if self.cutter_comp_side:
+            # TODO disable it here instead of just erroring out.
             self.set_errormsg("M6: Cutter radius compensation must be off")
             return INTERP_ERROR
 
@@ -223,14 +225,9 @@ def rapidchange_change_prolog(self, **words):
    #     suppress_probe = do_manual_pickup and self.rapidchange.PROBE_AFTER_MANUAL_LOAD
    #     do_pickup = do_rc_pickup or do_manual_pickup
 
-   #     do_probe = do_pickup and not suppress_probe
-        do_probe = False
-        self.params["rc_do_probe"] = 1 if do_probe else 0
-
         do_any_action = \
             do_rc_drop or do_manual_drop \
-            or do_rc_pickup or do_manual_pickup \
-            or do_probe 
+            or do_rc_pickup or do_manual_pickup 
         
         self.params["rc_do_any_action"] = 1 if do_any_action else 0
 

@@ -195,20 +195,6 @@ o<_rapidchange_m6> sub
         G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
     o150 endif
 
-    ; Probe new tool
-    o160 if [#<rc_do_probe> EQ 1]
-        (print, Probing)
-        
-        m72 ; restore modal states. We want g43 to remain applied
-
-        ; G49 ; clear current tool offset
-        o<_rapidchange_probe> call
-
-        m73 ; save modal states
-
-        G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
-    o160 endif
-
     ; Return to original position
     o170 if [#<rc_do_any_action> EQ 1]
         (print, Restoring original position)
