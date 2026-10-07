@@ -16,7 +16,6 @@ class RapidChangeConfig:
 
 
         self.FORCE_ALL_MANUAL_CHANGES = self.read_ini_value_bool("FORCE_ALL_MANUAL_CHANGES")
-        # TODO Remove self.PROBE_AFTER_MANUAL_LOAD = self.read_ini_value_bool("PROBE_AFTER_MANUAL_LOAD")
 
         self.POCKET_BASE_X = self.read_ini_value("POCKET_BASE_X")
         self.POCKET_BASE_Y = self.read_ini_value("POCKET_BASE_Y")
@@ -125,6 +124,16 @@ def get_pocket_xy(self, pocket):
 #   #<rc_do_any_action>     1 if doing any drop or probe. Used to supress move to safe Z when there's nothing to do.
 
 def rapidchange_change_prolog(self, **words):
+    if self.task == 0:  # from remap.py zbotatc_M6_prolog
+        # this is the preview that is run when the file is loaded
+        # because we remapped M6, the python GLCanon.change_tool() method is never called.
+        # but we want to use that to easily build a list of all tools that are used within a program
+        # at preview time.  So drive this callback manually during preview and let that side of things keep track
+        # of it since it will know when the preview is complete after the load (and we don't).
+        self.params["selected_tool"] = self.selected_tool
+        emccanon.CHANGE_TOOL()
+        return INTERP_OK
+    
     try:
         # trick to get RapidChange init'd without modifying PP's toplevel and remap.py modules. This is a bit of a hack, but it works.
         if not hasattr(self, "rapidchange"):
@@ -137,8 +146,7 @@ def rapidchange_change_prolog(self, **words):
             self.set_errormsg("M6: No tool prepared")
             return INTERP_ERROR
         
-        if self.cutter_comp_side:
-            # TODO disable it here instead of just erroring out.
+        if self.cutter_comp_side > 0:
             self.set_errormsg("M6: Cutter radius compensation must be off")
             return INTERP_ERROR
 
@@ -154,23 +162,39 @@ def rapidchange_change_prolog(self, **words):
         self.params["current_pocket"] = self.current_pocket
         self.params["selected_pocket"] = self.selected_pocket
 
-        # Get Px values from tool table for current and selected tools
+        # From remap.py zbotatc_M6_prolog,
+        # just exit - do nothing in NGC , just M5
+        if self.params["tool_in_spindle"] == self.params["selected_tool"]:
+            self.error_handler.log(
+                "Tool Change is effectively a no-op as new and old tool are same {}".format(self.params["selected_tool"]))
+            # set mode to exit NGC procedure which REMAP will now call
+            self.params["_mode"] = -1.0
+            return INTERP_OK  # will now pass control to NGC, which will exit
+        
+               # Get Px values from tool table for current and selected tools
         # Get RapidChange pockets from rack map
         rc_current_pocket = find_rack_pocket(self, self.current_tool)
         rc_selected_pocket = find_rack_pocket(self, self.selected_tool)
 
         self.params["rc_current_pocket"] = rc_current_pocket
         self.params["rc_selected_pocket"] = rc_selected_pocket
-        if (rc_current_pocket == 0 and self.current_tool > 0):
-            self.set_errormsg("Current tool, %i, not found in table" % self.current_tool)
+
+        """ if (rc_current_pocket == 0 and self.current_tool > 0):
+            self.params["_old_tool_in_rack"] = False
+           # self.set_errormsg("Current tool, %i, not found in table" % self.current_tool)
             # TODO Change to try to drop current_tool into an empty pocket, if one exists. If not, then ask for manual remove
-            return INTERP_ERROR
+           # return INTERP_ERROR
+        else:
+            self.params["_old_tool_in_rack"] = True
         
        
         if (rc_selected_pocket == 0 and self.selected_tool > 0):
-            self.set_errormsg("Selected tool, %i, not found in table" % self.selected_tool)
+            self.params["_new_tool_in_rack"] = False
+            #self.set_errormsg("Selected tool, %i, not found in table" % self.selected_tool)
             # TODO Allow user to add to table, then continue if added, else error out
-            return INTERP_ERROR
+            #return INTERP_ERROR
+        else:
+            self.params["_new_tool_in_rack"] = True """
         
         self.params["rc_current_pocket"] = rc_current_pocket
         self.params["rc_selected_pocket"] = rc_selected_pocket
@@ -269,7 +293,7 @@ def launch_rack_gui_prolog(self, **words):
 
     try:
         subprocess.Popen(
-            ["python3", "/home/operator/rack_gui.py"],
+            ["python3", "/home/operator/gcode/python/rack_gui.py" , self.rapidchange.RACK_TABLE, str(self.rapidchange.NUM_POCKETS)],
             close_fds=True
         )
     except Exception as error:

@@ -1,19 +1,46 @@
 ; Remapped M6 behavior for RapidChange ATC
-; Must use rapidchange_change_prolog which calculates pocket positions and determines which steps to execute.
+; Must use rapidchange_change_prolog which calculates pocket positions and determines which steps
+; All code is either from https://github.com/haskins-guitars/linuxcnc-rapidchange or PathPilot (GPL2).
+; with comments and some tinkering to make it work with PathPilot.  The original code is copyright 2020-2023 by Haskins Guitars, LLC and licensed under the GPL2.
+
+; _mode=-1.0 means Manual Change, _mode=0 means Automatic Change, _mode=1.0 means Normal M6 execution path
+
 o<_rapidchange_m6> sub
     ; Don't execute in UI preview
     O100 if [#<_task> EQ 0]
         M6 T#<selected_tool>
-        o<tormach_tool_change> return [1] (gremlin is loading this code)
+        o<_rapidchange_m6> return [1] (gremlin is loading this code)
         (ABORT,tool change remap execution went past remap)
     O100     return [999]
     O100 endif
+    
+    ; Arrive here if Manual Tool Change
+    o<seek_start_line> if [#<_task> EQ -1]
+        (PRINT, M6 T#<selected_tool> called from manual tool change)
+        M6 T#<selected_tool>
+        M80    (Store users modal variables, feed rate, G90/91, overrides,etc)
+        o<_rapidchange_m6> return [1] (set start line needs to know what the tool should be)
+        (ABORT,tool change remap execution went past remap)
+    o<seek_start_line> endif
+
+    ; Fall through to here due to being called with #<_task> EQ 1, which is the normal M6 execution path
+    M66 P63 L0   (bust-a-queue so that M80 saves off real time state, not some future state due to interp read-ahead)
+    M80    (Store users modal variables, feed rate, G90/91, overrides,etc)
+    M997   (Move to a position within machine limits, no-op if it's already in limits)
+
+    #<_zpos_on_entry> = #<_z_machine>  (save g53 z axis pos at start of M6 so it can be restored)
+
+    M64 P#<_is_changing>    (in a tool change NGC routine - tells cycle start to ignore tray in conditions)
+                            (if event feed hold is pressed in middle of a change                          )
+    ; TODO Implement later if possible #<_spindle_quiesced> = 0.0  (default to running state until we know it stopped)
 
     o101 if [#<_spindle_on> eq 1]
         (abort, Spindle must be stopped before M6)
     o101 return [-100]
     o101 endif
-
+; TODO Ok to here????
+: TODO PP does o<rack_tool_change> call here 
+; else if _mode = -1.0 do shorty check for manual tool change, else if _mode = 0.0 do shorty check for automatic tool change, else if _mode = 1.0 do normal M6 execution path
     m73 ; Save and autorestore modal states
 
     G21 ; Set millimeters
@@ -37,9 +64,8 @@ o<_rapidchange_m6> sub
             M64 P[#<_ini[RAPIDCHANGEATC]COVER_DO>]
         o116 endif
 
-        (print, Moving to safe Z)
         ; move to safe Z
-        (print, Safe Z: [#<_ini[RAPIDCHANGEATC]SAFE_Z>])
+        (print, Moving to Safe Z: [#<_ini[RAPIDCHANGEATC]SAFE_Z>])
         G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
     o115 endif
 
@@ -47,22 +73,25 @@ o<_rapidchange_m6> sub
     o120 if [#<rc_do_manual_drop> eq 1]
         (print, Moving for manual tool drop)
         ; move
-        G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
-        G53 G0 X[#<_ini[RAPIDCHANGEATC]MANUAL_CHANGE_X>] Y[#<_ini[RAPIDCHANGEATC]MANUAL_CHANGE_Y>]
+        ;G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
+        ;G53 G0 X[#<_ini[RAPIDCHANGEATC]MANUAL_CHANGE_X>] Y[#<_ini[RAPIDCHANGEATC]MANUAL_CHANGE_Y>]
+
+        o<prompt> call  [11] [#<tool_in_spindle>]     (prompt to remove old tool, 11 = remove)
+        M61 Q0 (spindle is now T0)
 
         ; Ensure tool changed is currently low
-        M66 L0 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGED_DI>]
-        o121 if [#5399 ne 0]
-            (msg, Failed! Tool changed DI hung high.)
-        o121 return [-1]
-        o121 endif
+        ;M66 L0 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGED_DI>]
+        ;o121 if [#5399 ne 0]
+        ;    (msg, Failed! Tool changed DI hung high.)
+        ;o121 return [-1]
+        ;o121 endif
 
         ; set DO to trigger hal_manualtoolchange
-        M64 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGE_DO>]
+        ;M64 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGE_DO>]
         ; Wait for DI from hal_manualtoolchange to continue
-        M65 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGED_DI>]
+        ;M65 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGED_DI>]
         ; Clear DO to trigger hal_manualtoolchange
-        M65 L3 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGE_DO>]
+        ;M65 L3 P[#<_ini[RAPIDCHANGEATC]TOOL_CHANGE_DO>]
 
         G49 ; clear current tool offset
     o120 endif
@@ -195,6 +224,7 @@ o<_rapidchange_m6> sub
         G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
     o150 endif
 
+    
     ; Return to original position
     o170 if [#<rc_do_any_action> EQ 1]
         (print, Restoring original position)
