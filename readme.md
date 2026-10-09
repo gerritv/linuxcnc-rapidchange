@@ -54,19 +54,23 @@ M65 P[#<_ini[RAPIDCHANGEATC]COVER_DO>]
 
 Copy all files to `rapidchange` directory in your configuration. Recommendation is `/home/operator/rapidchange`.
 
-### Add `.ini` file `[RAPIDCHANGEATC]` section
+Copy the .ngc files to ~/gcode/subroutines.
 
-Add 
+Copy the *.py files to ~/gcode/python, create the directory if it is not present.
 
-```
+Modify 2 existing PathPilot files, you will need to do this every time that you update PathPilot to a new version
+
+```file
 #pp_includes ../../../rapidchange/rapidchange.ini at top of `~tmc/configs/tormach_mill/tormach_mill_base.ini`
-```
-Add `import * from rc_remap` to `~tmc/configs/tormach_mill/python/remap.py` after the other `import` stements.
-```ini
 
+Add `import * from rc_remap` to `~tmc/configs/tormach_mill/python/remap.py` after the other `import` stements.
+```
+
+```inc
 Edit the `rapidchange.inc` file as needed. The following is a list of paraments to configure:
 ```
-```[RAPIDCHANGEATC]
+```
+[RAPIDCHANGEATC]
 # Set to 1 to force all chnages to be handled manually.
 # Set IR_DI to -1 to disable probing after tool change
 FORCE_ALL_MANUAL_CHANGES = 0
@@ -117,3 +121,17 @@ COVER_DO = 0
 ### HAL configuration
 
 There are no Hal file changes required.
+
+### Cover and Tool Detection
+
+In order to make use of these features, you will need a USBIO interface. These are easy to build yourself, using either a Teensy or a ProMicro AT32U4 board plus relay and IR boards. Or you could add a HAL file to map pins on your controller to handle the I/O.
+
+If you decide to embed your ETS inside the Rack, then you will need to edit the Fusion PostProcessor to output the Open and Close commands before and after the M37 call.
+
+### Operation
+
+Typically you start with an empty spindle since PathPilot requires you to touch off the spindle nose on the ETS before using the setter. Since the rack_map file is only read by the tool change code, you must populate it prior to running a job. Use M290 to bring up the editor window.
+
+If a requested tool is not in the rack_map, you will be asked to insert it into the spinlde. Ditto if the tool in the spindle isn't in the rack_map, you will be asked to manually remove it.
+
+It is recommended to use the Setup file feature in Fusion360 to print out the list of tools needed for a job. Alternatively you can see the list at the top when you first load a program.
