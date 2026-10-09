@@ -14,7 +14,7 @@ There is a companion GUI to manage the rack_map, use M290 to load that from the 
 
 The Px value from the rack_map.txt file is used to determine which RapidChange pocket to load/unload a tool from. 
 
-(FIX This so that it is based on tool-present-in-table) Tools with Px values less than 1 or greater than `[RAPIDCHANGEATC].NUM_POCKETS` will trigger a manual tool change request.
+Tools not in the rack_map will trigger a manual tool change request. You would be prompted to either remove the tool or insert the tool manually in that case.
 
 Example minimal tool table for an 8 pocket changer.
 
@@ -23,24 +23,15 @@ Example minimal tool table for an 8 pocket changer.
 T1  P1 ; Tool in pocket 1
 T2  P2 ; Tool in pocket 2
 T3  P3 ; Tool in pocket 3
-T4  P4 ; Tool in pocket 4
+T47  P4 ; Tool in pocket 4
 T5  P5 ; Tool in pocket 5
-T6  P6 ; Tool in pocket 6
-T7  P7 ; Tool in pocket 7
+T36  P6 ; Tool in pocket 6
+T127  P7 ; Tool in pocket 7
 T8  P8 ; Tool in pocket 8
 T9  P9 ; Tool requiring manual change
 T10 P0 ; Tool requiring manual change
 ```
 
-Tx and Px values do NOT need to match, so this is completely valid.
-
-```
-;
-T123  P1 ; Tool in pocket 1
-T456  P2 ; Tool in pocket 2
-T789  P9 ; Tool requiring manual change
-T1000 P0 ; Tool requiring manual change
-```
 
 ### G-Code usage
 
@@ -49,6 +40,7 @@ T1000 P0 ; Tool requiring manual change
 T1 M6 ; Pickup T1, probe T1
 T2 M6 ; Drop T1, pickup T2, probe T2
 T0 M6 ; Drop T2
+Of course in the case of PathPilot you should be using the ZoomSpeed postprocessor for Fusion360. It will add the M37 ETS code as needed.
 
 ; Open dust cover
 M64 P[#<_ini[RAPIDCHANGEATC]COVER_DO>]
@@ -56,23 +48,24 @@ M64 P[#<_ini[RAPIDCHANGEATC]COVER_DO>]
 ; Close dust cover
 M65 P[#<_ini[RAPIDCHANGEATC]COVER_DO>]
 
-; Toolset current tool
-O<toolset> CALL
 ```
 
 ## Installation
 
-Copy all files to `rapidchange` directory in your configuration.
+Copy all files to `rapidchange` directory in your configuration. Recommendation is `/home/operator/rapidchange`.
 
 ### Add `.ini` file `[RAPIDCHANGEATC]` section
 
 Add 
 
 ```
-#pp_includes ../../../rapidchange/rapidchange.ini
+#pp_includes ../../../rapidchange/rapidchange.ini at top of `~tmc/configs/tormach_mill/tormach_mill_base.ini`
 ```
-
+Add `import * from rc_remap` to `~tmc/configs/tormach_mill/python/remap.py` after the other `import` stements.
 ```ini
+
+Edit the `rapidchange.inc` file as needed. The following is a list of paraments to configure:
+```
 [RAPIDCHANGEATC]
 # Set to 1 to force all chnages to be handled manually.
 # Set IR_DI to -1 to disable probing after tool change
@@ -119,88 +112,8 @@ IR_DI = 0
 # motion.digital-out-xx connected to cover output
 #   -1 disables cover
 COVER_DO = 0
-
-# Toolsetter position
-TOOLSET_X = 580
-TOOLSET_Y = 45
-
-# Feed rate when searching for end of tool
-TOOLSET_SEARCH_FEED = 500
-# Max distance to search (negative value on most machines).
-# Ensure spindle with empty collet nut won't crash into toolsetter before exceeding this travel.
-TOOLSET_SEARCH_DISTANCE = -110
-# Backoff distance from search contact to begin latch probe (positive value on most machines)
-TOOLSET_LATCH_BACKOFF = 1
-# Feed rate when doing more precise latch probe
-TOOLSET_LATCH_FEED = 10
-# Max distance to do latch probe, should be a little more than (negative value on most machines)
-TOOLSET_LATCH_DISTANCE = -1.5
-# Machine Z when nut would contact tool setter, used to calculate tool offset
-TOOLSET_HEIGHT = 80
-
-# Position to rapid to for manual tool changes
-MANUAL_CHANGE_X = 580
-MANUAL_CHANGE_Y = 0
-
-# motion.digital-out-xx to trigger manual tool change UI
-#   -1 disables manual tool changes
-TOOL_CHANGE_DO = 1
-# motion.digital-in-xx indicating manual tool change complete
-#   -1 disables manual tool changes
-TOOL_CHANGED_DI = 1
-```
-
-### Update `remap_common.inc` file in ~/tmc/configs/tormach_mill/common
-
-Add remap and subroutines to your existing `[RS274NGC]` section.
-
-```ini
-[RS274NGC]
-REMAP=M6    modalgroup=6 prolog=rapidchange_change_prolog ngc=rapidchange_m6 epilog=change_epilog
-SUBROUTINE_PATH = rapidchange/subroutines:~/linuxcnc/nc_files/remap-subroutines
-ON_ABORT_COMMAND=o<on_abort> call
-```
-
-### Add/update `.ini` file `[Python]` section
-
-#### If you don't have an existing `[Python]` section
-
-1. Add this to your `.ini` file.
-
-```ini
-[PYTHON]
-TOPLEVEL = rapidchange/toplevel.py
-PATH_PREPEND = ./rapidchange/python
-PATH_PREPEND = ./rapidchange
-PATH_APPEND = ~/linuxcnc/nc_files/examples/remap_lib/python-stdglue
-```
-
-#### If you have an existing `[Python]` section
-
-1. Merge the contents of `toplevel.py` and `remap.py` into your existing Python code.
-2. Add `PATH_PREPEND = ./rapidchange`.
-3. Add `PATH_APPEND = ~/linuxcnc/nc_files/examples/remap_lib/python-stdglue` if it doesn't already exist.
-
-### Update `.ini` file `[HAL]` section
-
-Add `[HAL]HALFILE = rapidchange/atc.hal`, and `[HAL]TWOPASS = on` if you're using `or2` anywhere else.
-
-```ini
-[HAL]
-HALUI = halui
-TWOPASS = on
-HALFILE = main.hal
-HALFILE = rapidchange/atc.hal
 ```
 
 ### HAL configuration
 
-#### `rapidchange/atc.hal`
-
-Update `rapidchange/atc.hal` to:
-
-1.  Connect IO nets
-    - IR (`rapidchange-dust-cover`)
-    - Dust cover(`rapidchange-dust-cover`)
-
-3.  If using another manual tool change UI, replace `hal_manualtoolchange` configuration
+There are no Hal file changes required.
