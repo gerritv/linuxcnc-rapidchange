@@ -1,0 +1,78 @@
+o<rc_fetch_tool> sub
+    (has no input parameters and either aborts or returns 0)
+    (however it uses plenty of "global" variables)
+ 
+    (Prevent limit errors due to axis compensation by retracting just below the Z limit)
+    #<rack_z_clear> = -0.01
+    (PRINT,rack_fetch_tool entered, fetching tool [#<_new_tool>])
+    
+    (TODO might try this later let rack_tool_changer.py know what tool we're fetching.  Used to update GUI rack display)
+    ;#<this_tool> = #<_new_tool>
+    ;M68 E[#<_rack_aout_new_tool>] Q[#<this_tool>]
+    ;M68 E[#<_rack_aout_complete>] Q0
+
+    (M5 already issued at start of tool change, but just to be sure)
+    M5
+
+    (Z up to G53 0.0)
+    G53 G0 Z[#<rack_z_clear>]
+
+    (print, Pickup tool #<_new_tool> at #<_rc_pickup_x>,#<_rc_pickup_y>)
+    ; move to rc_pickup_x, rc_pickup_y
+    G53 G0 X[#<_rc_pickup_x>] Y[#<_rc_pickup_y>]
+
+    ; Move close to pocket
+    G53 G0 Z[#<_rc_engage_Z_start>]
+
+    ; Spindle on
+    M3 S[#<_rc_engage_load_rpm>]
+
+    #<strikes_remaining> = #<_rc_engage_load_strikes>
+    o151 while [#<strikes_remaining> gt 0]
+        #<strikes_remaining> = [#<strikes_remaining> - 1]
+
+        ; Lower into pocket
+        G53 G1 Z[#<_rc_engage_Z_end>] F[#<_rc_engage_feed>] 
+
+        ; Move to IR checking position
+        G53 G1 Z[#<_rc_engage_Z_start>] F[#<_rc_engage_feed>]
+    o151 endwhile
+    
+    M5 ; Stop spindle
+    G4 P1  ; Dwell to allow spindle to stop
+
+    o152 if [#<_rc_IR_DI> lt 0]
+        (print, Load Success. No IR DI configured, assuming success.)
+    o152 else
+        M66 P[#<_rc_IR_DI>] L0  ; Read IR sensor status
+
+        o153 if [#5399 ne 1]
+            (msg, Load FAILED! Tool not present)
+            G53 G0 Z[#<_rc_safe_Z>]
+        o153 return [-4] ; Fail M6
+        o153 endif
+
+        ; Move to height IR should break with fully threaded on nut
+        G53 G0 Z[#<_rc_engage_Z_ir_nut_break>]        
+        M66 P63 L0 (queue buster)
+
+        G4 P0.5 ; Pause to ensure motion is complete
+
+        M66 P[#<_rc_IR_DI>] L0  ; Read IR sensor status
+
+        o154 if [#5399 ne 0]
+            (msg, Load FAILED! Nut not fully threaded on)
+            G53 G0 Z[#<_rc_safe_Z>]
+        o154 return [-4] ; Fail M6
+        o154 endif
+    o152 endif
+
+    ; Run builtin M6 to update tool data
+    M6 
+
+    G53 G0 Z[#<_rc_safe_Z>]
+
+    
+
+o<rc_fetch_tool> endsub [0]
+

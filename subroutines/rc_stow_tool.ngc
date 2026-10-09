@@ -32,7 +32,7 @@ o<rc_stow_tool> sub
 
     (Ready to do the tool drop/stow)
 
-    (print, Dropping tool #<_old_tool> at #<_rc_drop_x>,#<rc_drop_y>)
+    (print, Dropping tool #<_old_tool> at #<_rc_drop_x>,#<_rc_drop_y>)
     ; move to rc_drop_x, rc_drop_y
     G53 G0 X[#<_rc_drop_x>] Y[#<_rc_drop_y>]
 
