@@ -1,12 +1,12 @@
-# Tormach PathPilot RapidChange Configuration
+#  RapidChange Configuration for Tormach PathPilot
 
-Unofficial Tormach PathPilot configuration for RapidChangeATC tool changer.
-
-Includes an M6 remap, so normal `Tx M6` commands will use RapidChange ATC.
+Unofficial Tormach PathPilot configuration for https://RapidChangeATC.com type tool changers. Other examples are https://BenchWorks.co.za, https://www.onefinitycnc.com/product-page/onefinity-easy-atc-by-rapidchange-atc-redline and others.
 
 This is a (very) modified version of https://github.com/haskins-guitars/linuxcnc-rapidchange to work with Tormach's PathPilot. It expects an ETS, if any, to be configured and set at the beginning of each run. Even if you use a RapidChange pocket for an ETS, it will be used by the standard PathPilot M37 code.
 
-There is a companion GUI to manage the rack_map, use M290 to load that from the MDI. Because the typical SOP with PathPilot using an ETS requires starting with an empty spindle, manual tool changes can be avoided by loading your RapidChange magazine and then editing the rack_map. See TODO at end of this README for the case where you need more tools than pockets, currently you will get an error if the required tool is not in the map.
+There is a companion GUI to manage the rack_map, use M290 to load that from the MDI. Because the typical SOP with PathPilot using an ETS requires starting with an empty spindle, manual tool changes can be avoided by loading your RapidChange magazine and then editing the rack_map. 
+
+The whole M6 Remap and related files are structured to minimize the edits required on every PathPilot update. Most of the files reside in ~/gcode sub directories and thus are not impacted by updates.
 
 ## Usage
 
@@ -135,3 +135,10 @@ Typically you start with an empty spindle since PathPilot requires you to touch 
 If a requested tool is not in the rack_map, you will be asked to insert it into the spinlde. Ditto if the tool in the spindle isn't in the rack_map, you will be asked to manually remove it.
 
 It is recommended to use the Setup file feature in Fusion360 to print out the list of tools needed for a job. Alternatively you can see the list at the top when you first load a program.
+
+### Possible Future enhancements
+
+These may or may not happen:
+- drop tools into an empty pocket and update the rack_map
+- named rack_maps, so you can easily re-run jobs
+- visual gui should tools in the rack
