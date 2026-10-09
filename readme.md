@@ -66,7 +66,7 @@ Add `import * from rc_remap` to `~tmc/configs/tormach_mill/python/remap.py` afte
 
 Edit the `rapidchange.inc` file as needed. The following is a list of paraments to configure:
 ```
-[RAPIDCHANGEATC]
+```[RAPIDCHANGEATC]
 # Set to 1 to force all chnages to be handled manually.
 # Set IR_DI to -1 to disable probing after tool change
 FORCE_ALL_MANUAL_CHANGES = 0
