@@ -48,6 +48,9 @@ M64 P[#<_ini[RAPIDCHANGEATC]COVER_DO>]
 ; Close dust cover
 M65 P[#<_ini[RAPIDCHANGEATC]COVER_DO>]
 
+; bring up the Rack_map gui
+M290
+
 ```
 
 ## Installation
@@ -139,6 +142,7 @@ It is recommended to use the Setup file feature in Fusion360 to print out the li
 ### Possible Future enhancements
 
 These may or may not happen:
+- Move [RAPIDCHANGE] ini params to a section in the rack_map gui. This would avoid reloading PathPilot after each edit.
 - drop tools into an empty pocket and update the rack_map
 - named rack_maps, so you can easily re-run jobs
 - visual gui should tools in the rack
