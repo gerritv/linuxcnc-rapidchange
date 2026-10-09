@@ -1,0 +1,105 @@
+; This file is a blend of PathPilot tool_change.ngc and Haskins Guitars rapidchange_m6.ngc.  It is intended to be used with the RapidChange remap for PathPilot.  
+; The original code is copyright 2020-2023 by Haskins Guitars, LLC  (no known license)
+; and tormach_tool_change is copyright Tormach, licensed under the GPL2.
+o<rc_m6_tool_change> sub
+(print, rc_m6_tool_change.ngc: new tool is #<_new_tool>, old tool is #<_old_tool>)
+(print, Mode is #<_mode>, new slot is #<_new_slot>, old slot is #<_old_slot>)
+(----------------------------------------------------------------------------------------------------)
+(note - GREMLIN calls this routine to do a preview - sets #<_task> global variable to 0              )
+(note - the interp calls this - sets #<_task> global variable to -1                                  )
+(note - REMAP expects any positive return value when exiting these routines, hence return [1] is used)
+(----------------------------------------------------------------------------------------------------)
+o<preview> if [#<_task> EQ 0]
+    M6 T#<_new_tool>
+    o<rc_m6_tool_change> return [1] (gremlin is loading this code)
+    (ABORT,tool change remap execution went past remap)
+o<preview> endif
+o<seek_start_line> if [#<_task> EQ -1]
+    (PRINT, M6 T#<new_tool>)
+    M6 T#<_new_tool>
+    M80    (Store users modal variables, feed rate, G90/91, overrides,etc)
+    o<rc_m6_tool_change> return [1] (set start line needs to know what the tool should be)
+    (ABORT,tool change remap execution went past remap)
+o<seek_start_line> endif
+
+(----------------------------------------------------------------------------------------------------)
+M66 P63 L0   (bust-a-queue so that M80 saves off real time state, not some future state due to interp read-ahead)
+M80    (Store users modal variables, feed rate, G90/91, overrides,etc)
+M997   (Move to a position within machine limits, no-op if it's already in limits)
+
+; TODO do we need to turn off mist/flood coolant here?  If so, do we need to save the state and restore it later?
+
+#<_zpos_on_entry> = #<_z_machine>  (save g53 z axis pos at start of M6 so it can be restored)
+
+M64 P#<_is_changing>    (in a tool change NGC routine - tells cycle start to ignore tray in conditions)
+                        (if event feed hold is pressed in middle of a change                          )
+; TODO can we tell on my control? #<_spindle_quiesced> = 0.0  (default to running state until we know it stopped)
+(print, Past the _task stuff rc_tool_changer_enabled is #<_rc_tool_changer_enabled>)
+
+o<rack_check> if [#<_rc_tool_changer_enabled> NE 0.0]
+    (------------------------)
+    ( Using RapidChange/BenchWorks style tool changer )
+    (------------------------)
+    o<rc_tool_change> call
+ o<rack_check> else
+    (----------------------------------------------------------------------------------)
+    (                 Mill abbreviated tool change  - shorty                           )
+    ( Manual changes, non tray tool (both old and new), & old=new tools process here   )
+    ( ATC or not . Remap sets the mode in the prolog                                   )
+    (----------------------------------------------------------------------------------)
+    o<shorty_check> if [#<_mode> EQ -1.0]        (manual changes - nothing for mill ATC here to do)
+        o<tool_to_do> if [#<_new_tool> NE #<_old_tool>]  (do we need to change anything here?)
+            M5
+            o<prompt> call  [12] [#<_new_tool>]  (prompt for new tool, 12 = insert)
+        o<tool_to_do> endif
+
+    (------------------------------------------------------------)
+    ( Exit to part program after epilog busts q                  )
+    (------------------------------------------------------------)
+      M61 Q #<_new_tool>       (let lcnc do it's thing)
+      M81                      (restore user's modal state exiting subroutine)
+      M65 P#<_is_changing>     (not in tool change code anymore)
+      M66 P63 L0               (M6 epilog is insufficient to sync linuxcnc.stat for G37 prolog)
+      o<probe_check_manual> if [[#<_new_tool> EQ 99] AND [#<_old_tool> NE 99]]
+          (Turn ETS off explicitly to prevent conflicts with wireless probe)
+          M47
+          M44
+      o<probe_check_manual> elseif [[#<_new_tool> NE 99] AND [#<_old_tool> EQ 99]]
+          M45
+      o<probe_check_manual> endif
+      o<setter_check_manual> if [[#<_new_tool> EQ 1000] AND [#<_old_tool> NE 1000]]
+          M45
+          M46
+      o<setter_check_manual> elseif [[#<_new_tool> NE 1000] AND [#<_old_tool> EQ 1000]]
+          M47
+      o<setter_check_manual> endif
+      o<rc_m6_tool_change> return
+
+    o<shorty_check> endif
+o<rack_check> endif 
+(------------------------------------------------------------)
+( ATC exit - Restore user's modals, the epilog busts q       )
+(------------------------------------------------------------)
+M81             (restore user's modal state exiting subroutine)
+M65 P#<_is_changing>          (not in tool change code anymore)
+M66 P63 L0      (M6 epilog is insufficient to sync linuxcnc.stat for G37 prolog)
+
+; TODO I doubt we need the following, but it is here for now. 
+o<probe_check_atc> if [[#<_new_tool> EQ 99] AND [#<_old_tool> NE 99]]
+    (Turn ETS off explicitly to prevent conflicts with wireless probe)
+    M47
+    M44
+o<probe_check_atc> elseif [[#<_new_tool> NE 99] AND [#<_old_tool> EQ 99]]
+    M45
+o<probe_check_atc> endif
+o<setter_check_atc> if [[#<_new_tool> EQ 1000] AND [#<_old_tool> NE 1000]]
+    M45
+    M46
+o<setter_check_atc> elseif [[#<_new_tool> NE 1000] AND [#<_old_tool> EQ 1000]]
+    M47
+o<setter_check_atc> endif
+o<rc_m6_tool_change> endsub [1]
+
+M30
+
+

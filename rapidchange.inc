@@ -3,17 +3,14 @@
 modalgroup=6 
 argspec=q 
 prolog=rapidchange_change_prolog 
-ngc=_rapidchange_m6 
-epilog=change_epilog
+ngc=rc_m6_tool_change 
+# not used in router/rack epilog=change_epilog
 
 [REMAP_M290]
 modalgroup=10 
 prolog=launch_rack_gui_prolog
 python=rack_gui_launch_py
 
-
-[PYTHON]
-PATH_PREPEND = ~/rapidchange
 [RAPIDCHANGEATC]
 
 # The map of tool <> pocket

@@ -1,0 +1,49 @@
+o<rc_tool_change> sub
+
+(tormach_tool_change.ngc has already run some preamble code so gracefully)
+(return to it when finished so it can perform final cleanup or call abort)
+(as that knows how to cleanup also)
+(print, rc_tool_change.ngc: new tool is #<_new_tool>, old tool is #<_old_tool>)
+(print, new slot is #<_new_slot>, old slot is #<_old_slot>)
+(print, old_tool_in_rack is #<_old_tool_in_rack>, new_tool_in_rack is #<_new_tool_in_rack>)
+o<tool_to_do> if [#<_new_tool> NE #<_old_tool>]  (do we need to change anything here?)
+    M5
+
+    o<rack_check> if [[#<_old_tool_in_rack> EQ 0.0] AND [#<_new_tool_in_rack> EQ 0.0]]
+        (PRINT, rc_tool_change.ngc: no rack tools involved, prompting for manual insert of tool #<_new_tool>)
+        G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
+        o<prompt> call  [12] [#<_new_tool>]     (prompt for new tool, 12 = insert)
+
+    o<rack_check> else (if [[#<_old_slot> EQ -1.0] and [#<_new_slot> EQ -1.0]])
+        o<old_in_rack> if [#<_old_tool_in_rack> NE 0.0]
+        (print, rc_stow_call: old tool #<_old_tool> is in rack)
+            o<rc_stow_tool> call
+        o<old_in_rack> elseif [#<_old_tool> NE 0.0]
+            (PRINT, rc_tool_change.ngc: old tool not in rack, prompt for manual removal of tool #<_old_tool>)
+            G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
+            o<prompt> call  [11] [#<_old_tool>]     (prompt to remove old tool, 11 = remove)
+            M61 Q0 (spindle is now T0)
+        o<old_in_rack> endif
+
+        o<new_in_rack> if [#<_new_tool_in_rack> NE 0.0]
+        (print, rc_fetch_call: new tool #<_new_tool> is in rack)
+            o<rc_fetch_tool> call
+        o<new_in_rack> elseif [#<_new_tool> NE 0.0]
+            (PRINT, rc_tool_change.ngc: new tool #<_new_tool> is not in rack and not 0, prompt for manual insertion)
+            G53 G0 Z[#<_ini[RAPIDCHANGEATC]SAFE_Z>]
+            o<prompt> call  [12] [#<_new_tool>]     (prompt to remove old tool, 12 = insert)
+        o<new_in_rack> endif
+    o<rack_check> endif
+o<tool_to_do> endif
+(print, done with fetching and dropping of tools, returning to tormach_tool_change.ngc for final cleanup)
+M61 Q #<_new_tool>       (let lcnc do it's thing)
+
+o<probe_check_rack> if [[#<_new_tool> EQ 99] AND [#<_old_tool> NE 99]]
+    M44
+o<probe_check_rack> elseif [[#<_new_tool> NE 99] AND [#<_old_tool> EQ 99]]
+    M45
+o<probe_check_rack> endif
+
+o<rc_tool_change> endsub [1]
+
+M30
