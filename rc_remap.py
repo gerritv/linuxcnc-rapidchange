@@ -159,7 +159,8 @@ def rapidchange_change_prolog(self, **words):
         self.params["_rc_engage_Z_IR_nut_break"] = self.rapidchange.read_ini_value("ENGAGE_Z_IR_NUT_BREAK")
         self.params["_rc_engage_feed"] = self.rapidchange.read_ini_value("ENGAGE_FEED")
         self.params["_rc_IR_DI"] = self.rapidchange.read_ini_value("IR_DI")      
-        self.params["_rc_cover_D0"] = self.rapidchange.read_ini_value("COVER_DO")
+        self.params["_rc_cover_DO"] = self.rapidchange.read_ini_value("COVER_DO")
+        self.params["_rc_safe_Z"] = self.rapidchange.read_ini_value("SAFE_Z")
         #self.params["_rc_rack_table"] = self.rapidchange.read_ini_string("RACK_TABLE")
         # self.params["_rc_rack_map"] = self.rapidchange.RACK_MAP
         self.params["_rc_num_pockets"] = self.rapidchange.read_ini_value("NUM_POCKETS")

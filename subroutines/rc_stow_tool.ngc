@@ -14,149 +14,71 @@ o<rc_stow_tool> sub
     ;M68 E[#<_rack_aout_complete>] Q0 */
 
     G53 G0 Z[#<rack_z_clear>]
-    
-    o<router_tool_sensor> call [1] (pass 1 as we want tool to be present)
-    #<tool_sensor> = #<_value>
-    (PRINT,rc_stow_tool tool_sensor is #<tool_sensor>)
-    (tool_sensor will be 1 if tool sensor disabled in PP GUI)
-    (since we're stowing a tool, it should be present.  If not complain.)
-    
-    o<is_tool_present> while [[#<tool_sensor> NE 1]]
-        (PRINT,rc_stow_tool tool not present as expected)
-        o<rack_user_prompt> call [#<_ATC_PROMPT_TOOL_MISSING>] [#<this_tool>] (give user prompt & option to insert missing tool or abort)
-        o<check_for_user_abort> if [[#<_value>] EQ 0]
-            (PRINT,rc_stow_tool user aborted with tool sensor fault)
-            M68 E[#<_rack_aout_complete>] Q[.4 + #<this_tool>] (signal stow failure with tool + (RAR_STOW_FAIL/10))
-            o<atc_errors> call [#<_atc_user_cancel>]
-        o<check_for_user_abort> endif
-        (PRINT,rc_stow_tool tool retrying)
-        o<router_tool_sensor> call [1] (pass 1 as we want tool to be present)
-        #<tool_sensor> = #<_value>
-    o<is_tool_present> endwhile
 
-
-    (rapid to tool holder retract position)
-    o100 if [#<_old_tool_retract_axis_index> EQ 0.0]
-        G53 G0 X#<_old_tool_retract_abs> Y#<_old_tool_pocket_y>
-    o100 elseif [#<_old_tool_retract_axis_index> EQ 1.0]
-        G53 G0 X#<_old_tool_pocket_x> Y#<_old_tool_retract_abs>
-    o100 else
-        (ABORT,o<rack_stow_tool> <_old_tool_retract_axis_index> is #<_old_tool_retract_axis_index> instead of 0 or 1. Ending program.)
-    o100 endif
+    M5  (ensure spindle is stopped before attempting to stow tool)
+    G90 ; Absolute programming mode
+    G61 ; Exact Stop mode (to avoid overshoot of tool holder)   
 
     
-    #<repeat_stow_attempt> = 1
-    
-    o<keep_stowing> while [#<repeat_stow_attempt>]
-        #<repeat_stow_attempt> = 0  (defaults to doing this only once)
+    o<manage_cover> if [#<_ini[RAPIDCHANGEATC]COVER_DO> ge 0]
+        ; Open dust cover
+        M64 P[#<_rc_cover_DO>] (open dust cover)
+    o<manage_cover> endif
 
-        M5 (already issued at start of tool change, but repeat just to be sure)
-        
-        M27 (dust shoe up)
+    ; move to safe Z
+    G53 G0 Z[#<_rc_safe_Z>]
+    (bust queue to insure move complete before moving into tool holder)
+    M66 P63 L0
 
-        o<rack_spindle_stopped> call (test for spindle stopped via feedback from VFD, aborts and never returns if problem)
+    (Ready to do the tool drop/stow)
 
-        (Z down to pocket height)
-        G53 G0 Z#<_old_tool_pocket_z>
-        (bust queue to insure move complete before opening drawbar)
+    (print, Dropping tool #<_old_tool> at #<_rc_drop_x>,#<rc_drop_y>)
+    ; move to rc_drop_x, rc_drop_y
+    G53 G0 X[#<_rc_drop_x>] Y[#<_rc_drop_y>]
+
+    ; Move close to pocket
+    (PRINT, Moving to engage Z start: [#<_rc_engage_Z_start>])
+    G53 G0 Z[#<_rc_engage_Z_start>]
+    M66 P63 L0
+
+    ; Spindle on
+    M4 S[#<_rc_engage_unload_rpm>]
+
+    #<strikes_remaining> = #<_rc_engage_unload_strikes>
+    o131 while [#<strikes_remaining> gt 0]
+        #<strikes_remaining> = [#<strikes_remaining> - 1]
+
+        ; Lower into pocket
+        G53 G1 Z[#<_rc_engage_Z_end>] F[#<_rc_engage_feed>] 
+
+        ; Move to IR checking position
+        G53 G1 Z[#<_rc_engage_Z_start>] F[#<_rc_engage_feed>]
         M66 P63 L0
+    o131 endwhile
+    
+    M5 ; Stop spindle
+    G4 P1  ; Dwell to allow spindle to stop
 
-        (move into tool holder)
-        o200 if [#<_old_tool_retract_axis_index> EQ 0.0]
-            ((PRINT,move into tool holder index is 0 G53 G1 X#<_old_tool_pocket_x> F#<_jog_speed>))
-            G53 G1 X#<_old_tool_pocket_x> F#<_jog_speed>
-        o200 elseif [#<_old_tool_retract_axis_index> EQ 1.0]
-            ((PRINT,move into tool holder index is 1 G53 G1 Y#<_old_tool_pocket_y> F#<_jog_speed>))
-            G53 G1 Y#<_old_tool_pocket_y> F#<_jog_speed>
-        o200 endif
+    o132 if [#<_rc_IR_DI> lt 0]
+        (print, Unload Success. No IR DI configured, assuming success.)
+    o132 else
+        M66 P[#<_rc_IR_DI>] L0  ; Read IR sensor status
 
-        (bust queue to insure move completes before opening drawbar)
-        M66 P63 L0
+        o133 if [#5399 ne 0]
+            (msg, Unload FAILED! Tool still present)
+            G53 G0 Z[#<_rc_safe_Z>]
+        o133 return [-2] ; Fail M6
+        o133 endif
+    o132 endif
 
-        (try 20 times before deferring to user intervention)
-        #<release_attempt_cnt> = 20
-        #<release_tool_return> = 1 (fake fault so 1st pass happens)
+    G49 ; clear current tool offset
 
-        o<releasing> while [[#<release_attempt_cnt>] and [#<release_tool_return>]]
-            #<release_attempt_cnt> = [#<release_attempt_cnt> - 1]
-            M10 R0  (attempt to release tool, R0 is silently return success/failure) 
-            #<release_tool_return> = #<_value>
-            o<log_fail> if [#<release_tool_return> NE 0.0]  (Since M10 R0 was called, release_tool_return is either 0 or -2.  M10 with -1 return can't happen when using R0)
-                M11 (Don't get caught leaving collet solenoids on/open for any length of time lest the unexpected happens)
-                o<tell_user_sometimes> if [[#<release_attempt_cnt> mod 5] EQ 0.0] (should happen each 5 secs)
-                    (DEBUG, Please check your air pressure, continuing attempts to release tool)
-                o<tell_user_sometimes> else
-                    (PRINT,rack_stow_tool WARNING: rack_release_tool returned #<release_tool_return>)
-                o<tell_user_sometimes> endif
-                G4 P1 (pause for a sec to allow air to recover and M11 clamp to happen)
-            o<log_fail> endif
-        o<releasing> endwhile
-
-        o<release_chk> if [#<release_tool_return> NE 0.0] (check error return)
-            (PRINT, rack_stow_tool: Likely low air problem, moving out of fork before telling user)
-            M11 (Will prompt with fault and abort without returning if collet sensor doesn't say closed. Fortunately, not closing is highly unlikely.)
-            (move out of tool holder)
-            o210 if [#<_old_tool_retract_axis_index> EQ 0.0]
-                G53 G1 X#<_old_tool_retract_abs> F#<_jog_speed>
-            o210 elseif [#<_old_tool_retract_axis_index> EQ 1.0]
-                G53 G1 Y#<_old_tool_retract_abs> F#<_jog_speed>
-            o210 endif
-
-            M66 P63 L0 (bust queue)
-            G53 G0 Z[#<rack_z_clear>]
-            M66 P63 L0 (bust queue)
-
-            o<rack_user_prompt> call [#<_ATC_PROMPT_AIR>] (give user prompt & option to fix air)
-            o<check_for_user_abort> if [[#<_value>] EQ 0]
-                (PRINT,rack_stow_tool user abort)
-                M68 E[#<_rack_aout_complete>] Q[.4 + #<this_tool>] (signal stow failure with tool + (RAR_STOW_FAIL/10))
-                o<atc_errors> call [#<_atc_user_cancel>]  (aborts and never returns)
-            o<check_for_user_abort> endif
-            #<repeat_stow_attempt> = 1 (user said to retry)
-        o<release_chk> endif
-
-    o<keep_stowing> endwhile
-
-    (Delay before Z move for PP-4863)
-    G4 P1.0
-    (Z up to hover over tool)
-    G53 G1 Z[#<_old_tool_pocket_z> + #<_rack_air_blast_offset>] F#<_jog_speed>
-
+    G53 G0 Z[#<_rc_safe_Z>]
+    
     (spindle officially empty. Doing this after Z up, with the idea a power fail before the Z up will mean the tool will be left in spindle still, which is true.)
     (This is far from atomic, so there remains a window of "in-opportunity" where PP and Linuxcnc could get out of sync WRT where tool is)
-    M68 E[#<_rack_aout_complete>] Q[.3 + #<this_tool>] (signal stow success with tool + (RAR_STOW_SUCCESS/10))
+    (TODO ? M68 E[#<_rack_aout_complete>] Q[.3 + #<this_tool>] (signal stow success with tool + (RAR_STOW_SUCCESS/10)))
     M61 Q0
-
-    (drawbar already open but open again this time with air blast)
-    M10 P1 R0 (we don't care about low air now)
-    (air blast dwell)
-    G4 P1
-    (air blast off)
-    M10 P0 R0 (still don't care about low air)
-
-    (Z up to G53 0.0)
-    G53 G0 Z[#<rack_z_clear>]
-
-    (close collet)
-    M11 
-    (CI: we don't need to check M11 for success, as it'll be checked later for tool fetch, however tool sensor to verify empty could be added)
-
-    (stow of the tool is done)
-    (if new tool is manual or there is no new tool, then move out to retract position to allow Z space for next tool insertion)
-    (but if new tool is in the rack, no need to move out to retract position to allow Z space; it just wastes time)
-
-    o<skip_retract> if [#<_new_tool_in_rack> EQ 0.0]
-        (rapid to tool holder retract position)
-        o300 if [#<_old_tool_retract_axis_index> EQ 0.0]
-            G53 G0 X#<_old_tool_retract_abs> Y#<_old_tool_pocket_y>
-        o300 elseif [#<_old_tool_retract_axis_index> EQ 1.0]
-            G53 G0 X#<_old_tool_pocket_x> Y#<_old_tool_retract_abs>
-        o300 else
-            (ABORT,o<rack_stow_tool> <_old_tool_retract_axis_index> is #<_old_tool_retract_axis_index> instead of 0 or 1. Ending program.)
-        o300 endif
-    o<skip_retract> endif
-
-    (leave dust shoe up)
 
 o<rc_stow_tool> endsub [0]
 
