@@ -27,6 +27,9 @@ M66 P63 L0   (bust-a-queue so that M80 saves off real time state, not some futur
 M80    (Store users modal variables, feed rate, G90/91, overrides,etc)
 M997   (Move to a position within machine limits, no-op if it's already in limits)
 
+G21     ; We do everything in metric, so make sure we are in metric mode
+        ; M81 will restore to whatever the user had set, but we need to be in metric for the tool change code to work properly
+
 ; TODO do we need to turn off mist/flood coolant here?  If so, do we need to save the state and restore it later?
 
 #<_zpos_on_entry> = #<_z_machine>  (save g53 z axis pos at start of M6 so it can be restored)

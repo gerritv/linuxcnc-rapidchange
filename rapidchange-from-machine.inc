@@ -11,7 +11,7 @@ modalgroup=10
 prolog=launch_rack_gui_prolog
 python=rack_gui_launch_py
 
-[[RAPIDCHANGEATC]
+[RAPIDCHANGEATC]
 # Set to 1 to force all chnages to be handled manually.
 # Set IR_DI to -1 to disable probing after tool change
 FORCE_ALL_MANUAL_CHANGES = 0
@@ -63,6 +63,27 @@ IR_DI = -1
 #   -1 disables cover
 COVER_DO = -1
 
+# Toolsetter position
+TOOLSET_X = 400
+TOOLSET_Y = -45
+
+# Feed rate when searching for end of tool
+TOOLSET_SEARCH_FEED = 500
+# Max distance to search (negative value on most machines).
+# Ensure spindle with empty collet nut won't crash into toolsetter before exceeding this travel.
+TOOLSET_SEARCH_DISTANCE = -110
+# Backoff distance from search contact to begin latch probe (positive value on most machines)
+TOOLSET_LATCH_BACKOFF = 1
+# Feed rate when doing more precise latch probe
+TOOLSET_LATCH_FEED = 10
+# Max distance to do latch probe, should be a little more than (negative value on most machines)
+TOOLSET_LATCH_DISTANCE = -1.5
+# Machine Z when nut would contact tool setter, used to calculate tool offset
+TOOLSET_HEIGHT = 80
+
+# Position to rapid to for manual tool changes
+MANUAL_CHANGE_X = 100
+MANUAL_CHANGE_Y = 0
 
 # motion.digital-out-xx to trigger manual tool change UI
 #   -1 disables manual tool changes
